@@ -1,0 +1,2 @@
+gcc ld.c -o ld -I rlib/ -L rlib/ -lraylib -lopengl32 -lgdi32 -lwinmm -Wall
+.\ld
