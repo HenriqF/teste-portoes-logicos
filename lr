@@ -1,3 +1,4 @@
 gcc jogo.c -o jogo -I rlib/ -L rlib/ -lraylib -lopengl32 -lgdi32 -lwinmm -Wall -Wextra
+#
 .\jogo
 rm jogo.exe

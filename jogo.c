@@ -6,12 +6,20 @@
 #define WIDTH 1000
 #define HEIGHT 1000
 
-#define GATE_LIMIT 50
+#define GATE_LIMIT 500
+#define CONEX_LIMIT 5000
+
 #define GATE_SIZE 60
 #define PIN_SIZE 20
+#define WIRE_THICK 5
 
 #define INPUT_COOLDOWN 0.2
 
+typedef enum{
+    NONE,
+    GATE,
+    PIN,
+} ObjTipo;
 
 typedef enum{
     NOT,
@@ -25,9 +33,13 @@ typedef struct{
     int size, x, y;
 } SizeCoord;
 
-typedef struct{
+
+typedef struct Pin{
     SizeCoord sc;
     int power;
+
+    struct Pin* conexoes;
+    size_t count_conex;
 } Pin;
 
 typedef struct{
@@ -40,15 +52,28 @@ typedef struct{
     size_t count_po;
 
     Tipo tipo;  
-
 } Portao;
+
+
+
+
+
 
 
 Portao* portoes;
 size_t count_portoes;
 
+
+//merdamoujse
 Vector2 mouse_coords;
+
 void* objeto_no_mouse;
+ObjTipo onm_tipo;
+
+void* objeto_clicado; 
+ObjTipo onm_clicado;
+int new_interaction = 0;
+//-----
 
 
 int withinBounds(int x, int y, SizeCoord sc){
@@ -57,8 +82,6 @@ int withinBounds(int x, int y, SizeCoord sc){
     }
     return 0;
 }
-
-
 
 int newPortao(int x, int y, Tipo tipo){ // 0 = suces
     if (count_portoes == GATE_LIMIT){
@@ -70,7 +93,7 @@ int newPortao(int x, int y, Tipo tipo){ // 0 = suces
 
     for (size_t i = 0 ; i < cpi; i++){
         SizeCoord sc = {PIN_SIZE, x-PIN_SIZE, y+(2*GATE_SIZE/3)*i};
-        pi[i] = (Pin){sc, 0};
+        pi[i] = (Pin){sc, 0, NULL, 0};
     }
     
     size_t cpo = 1;
@@ -78,7 +101,7 @@ int newPortao(int x, int y, Tipo tipo){ // 0 = suces
 
     for (size_t i = 0 ; i < cpo; i++){
         SizeCoord sc = {PIN_SIZE, x+GATE_SIZE, y+(GATE_SIZE/3)*(i+1)};
-        po[i] = (Pin){sc, 0};
+        po[i] = (Pin){sc, 0, NULL, 0};
     }
 
     SizeCoord sc = {50,x,y};
@@ -163,21 +186,28 @@ void handleKeyboardInput(){
 
 }
 
-void handleMouseInput(){
-
+void detectMouseObj(){
     int mX = mouse_coords.x;
     int mY = mouse_coords.y;
     objeto_no_mouse = NULL;
+    onm_tipo = NONE;
+
+    if (objeto_no_mouse != NULL){
+        goto fora_deteccao_obj;
+    }
+
     for (size_t i = 0; i < count_portoes; i++){
         Portao* p = &portoes[i];
         if (withinBounds(mX, mY, portoes[i].sc)){
             objeto_no_mouse = p;
+            onm_tipo = GATE;
             goto fora_deteccao_obj;
         }
 
         for (size_t j = 0; j < p->count_pi; j++){
             if (withinBounds(mX, mY, portoes[i].pins_in[j].sc)){
                 objeto_no_mouse = &portoes[i].pins_in[j];
+                onm_tipo = PIN;
                 goto fora_deteccao_obj;
             }
         }
@@ -185,18 +215,67 @@ void handleMouseInput(){
         for (size_t j = 0; j < p->count_po; j++){
             if (withinBounds(mX, mY, portoes[i].pins_out[j].sc)){
                 objeto_no_mouse = &portoes[i].pins_out[j];
+                onm_tipo = PIN;
                 goto fora_deteccao_obj;
             }
         }
     }
     fora_deteccao_obj:
 }
+
+void handleMouseInput(){
+    if (IsMouseButtonDown(MOUSE_LEFT_BUTTON)){
+        if (new_interaction == 0){
+            objeto_clicado = objeto_no_mouse; 
+            onm_clicado = onm_tipo;
+            new_interaction++;
+        }
+
+        if (onm_clicado == GATE){
+            Portao* g = objeto_clicado;
+            float mx = mouse_coords.x-(g->sc.size/2);
+            float my = mouse_coords.y-(g->sc.size/2);
+
+
+            g->sc.x = mx;
+            g->sc.y = my;
+
+            for (size_t i = 0; i < g->count_pi; i++){
+                SizeCoord sc = {PIN_SIZE, mx-PIN_SIZE, my+(2*GATE_SIZE/3)*i};
+                g->pins_in[i].sc = sc;
+
+            }
+
+            for (size_t i = 0; i < g->count_po; i++){
+                SizeCoord sc = {PIN_SIZE, mx+GATE_SIZE, my+(GATE_SIZE/3)*(i+1)};
+                g->pins_out[i].sc = sc;
+            }
+
+        }
+    
+        if (onm_clicado == PIN){
+            Pin* p = objeto_clicado;
+
+            Vector2 start = {p->sc.x+(p->sc.size/2), p->sc.y+(p->sc.size/2)};
+            Vector2 end = {mouse_coords.x, mouse_coords.y};
+
+            DrawLineEx(start, end, WIRE_THICK, GOLD);
+        }
+    }
+
+    if (IsMouseButtonUp(MOUSE_LEFT_BUTTON)){
+        objeto_clicado = NULL; 
+        onm_clicado = NONE;
+        new_interaction = 0;
+    }
+}
+
+
 //-----
 
 
 
 int main(){
-    //-----
     portoes = malloc(GATE_LIMIT*sizeof(Portao));
     count_portoes = 0;
 
@@ -214,9 +293,13 @@ int main(){
             handleKeyboardInput();
             last_input_time = current_time;
         }
+        
+        detectMouseObj();
+        
         handleMouseInput();
 
-        printf("%p\n", objeto_no_mouse);
+        
+        printf("(%p, %p)\n", objeto_no_mouse, objeto_clicado);
         renderGame();
         
     }
