@@ -38,7 +38,7 @@ typedef struct Pin{
     SizeCoord sc;
     int power;
 
-    struct Pin* conexoes;
+    struct Pin** conexoes;
     size_t count_conex;
 } Pin;
 
@@ -71,7 +71,7 @@ void* objeto_no_mouse;
 ObjTipo onm_tipo;
 
 void* objeto_clicado; 
-ObjTipo onm_clicado;
+ObjTipo oc_tipo;
 int new_interaction = 0;
 //-----
 
@@ -101,7 +101,7 @@ int newPortao(int x, int y, Tipo tipo){ // 0 = suces
 
     for (size_t i = 0 ; i < cpo; i++){
         SizeCoord sc = {PIN_SIZE, x+GATE_SIZE, y+(GATE_SIZE/3)*(i+1)};
-        po[i] = (Pin){sc, 0, NULL, 0};
+        po[i] = (Pin){sc, 0, malloc(10*sizeof(Pin*)), 0};
     }
 
     SizeCoord sc = {50,x,y};
@@ -141,6 +141,22 @@ void renderGame(){
         }
         for (size_t j = 0; j < p->count_po; j++){
             DrawRectangle(p->pins_out[j].sc.x, p->pins_out[j].sc.y, p->pins_out[j].sc.size, p->pins_out[j].sc.size, GRAY);
+
+            for (size_t w = 0; w < p->pins_out[j].count_conex; w++){
+                int pox = p->pins_out[j].sc.x;
+                int poy = p->pins_out[j].sc.y;
+                int pos = p->pins_out[j].sc.size;
+                int pix = p->pins_out[j].conexoes[w]->sc.x;
+                int piy = p->pins_out[j].conexoes[w]->sc.y;
+                int pis = p->pins_out[j].conexoes[w]->sc.size;
+
+
+                Vector2 start = {pox+(pos/2), poy+(pos/2)};
+                Vector2 end = {pix+(pis/2), piy+(pis/2)};
+
+                DrawLineEx(start, end, WIRE_THICK, GRAY);
+                
+            }
         }
 
         DrawRectangle(p->sc.x, p->sc.y, GATE_SIZE, GATE_SIZE, BLACK);
@@ -227,11 +243,11 @@ void handleMouseInput(){
     if (IsMouseButtonDown(MOUSE_LEFT_BUTTON)){
         if (new_interaction == 0){
             objeto_clicado = objeto_no_mouse; 
-            onm_clicado = onm_tipo;
+            oc_tipo = onm_tipo;
             new_interaction++;
         }
 
-        if (onm_clicado == GATE){
+        if (oc_tipo == GATE){
             Portao* g = objeto_clicado;
             float mx = mouse_coords.x-(g->sc.size/2);
             float my = mouse_coords.y-(g->sc.size/2);
@@ -253,7 +269,7 @@ void handleMouseInput(){
 
         }
     
-        if (onm_clicado == PIN){
+        if (oc_tipo == PIN){
             Pin* p = objeto_clicado;
 
             Vector2 start = {p->sc.x+(p->sc.size/2), p->sc.y+(p->sc.size/2)};
@@ -264,10 +280,20 @@ void handleMouseInput(){
     }
 
     if (IsMouseButtonUp(MOUSE_LEFT_BUTTON)){
-        objeto_clicado = NULL; 
-        onm_clicado = NONE;
-        new_interaction = 0;
-    }
+
+        if (objeto_clicado != NULL && objeto_no_mouse != NULL && onm_tipo == PIN && oc_tipo == PIN){
+            Pin* outpt = (Pin*)objeto_clicado;
+            Pin* input = (Pin*)objeto_no_mouse;
+
+            if (outpt->conexoes != NULL && (outpt->count_conex < 9)){
+                outpt->conexoes[outpt->count_conex++] = input;
+            }
+        }
+
+            objeto_clicado = NULL; 
+            oc_tipo = NONE;
+            new_interaction = 0;
+        }     
 }
 
 
@@ -299,7 +325,7 @@ int main(){
         handleMouseInput();
 
         
-        printf("(%p, %p)\n", objeto_no_mouse, objeto_clicado);
+        //printf("(%p, %p)\n", objeto_no_mouse, objeto_clicado);
         renderGame();
         
     }
