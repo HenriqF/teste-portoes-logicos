@@ -13,7 +13,7 @@
 #define PIN_SIZE 20
 #define WIRE_THICK 5
 
-#define INPUT_COOLDOWN 0.2
+#define INPUT_COOLDOWN 0.1
 
 typedef enum{
     NONE,
@@ -27,6 +27,9 @@ typedef enum{
     OR,
     AND,
     XOR,
+
+    PWR,
+    LUZ,
 } Tipo;
 
 typedef struct{
@@ -59,7 +62,6 @@ typedef struct{
 
 
 
-
 Portao* portoes;
 size_t count_portoes;
 
@@ -75,7 +77,6 @@ ObjTipo oc_tipo;
 int new_interaction = 0;
 //-----
 
-
 int withinBounds(int x, int y, SizeCoord sc){
     if ((x >= sc.x && x <= sc.x+sc.size) && (y >= sc.y && y <= sc.y+sc.size)){
         return 1;
@@ -88,7 +89,9 @@ int newPortao(int x, int y, Tipo tipo){ // 0 = suces
         return 1;
     }
 
-    size_t cpi = (tipo == NOT) ? 1 : 2;
+    size_t cpi = 2;
+    if (tipo == NOT || tipo == LUZ) cpi = 1;
+    else if (tipo == PWR) cpi = 0;
     Pin* pi = malloc(cpi*sizeof(Pin));
 
     for (size_t i = 0 ; i < cpi; i++){
@@ -97,6 +100,7 @@ int newPortao(int x, int y, Tipo tipo){ // 0 = suces
     }
     
     size_t cpo = 1;
+    if (tipo == LUZ) cpo = 0;
     Pin* po = malloc(cpo*sizeof(Pin));
 
     for (size_t i = 0 ; i < cpo; i++){
@@ -122,8 +126,59 @@ int newPortao(int x, int y, Tipo tipo){ // 0 = suces
     return 0;
 }
 
-
 //-----
+void gameLogic(){
+    for (size_t i = 0; i < count_portoes; i++){
+        Portao* p = &portoes[i];
+        for (size_t j = 0; j < p->count_pi; j++){
+            p->pins_in[j].power = 0;
+        }
+    }
+
+    for (size_t i = 0; i < count_portoes; i++){
+        Portao* p = &portoes[i];
+        for (size_t j = 0; j < p->count_po; j++){
+            for (size_t w = 0; w < p->pins_out[j].count_conex; w++){
+                if (p->pins_out[j].conexoes[w]->power == 0){
+                    p->pins_out[j].conexoes[w]->power = p->pins_out[j].power;
+                }
+                
+            } 
+        }
+    }
+
+    //lg
+    for (size_t i = 0; i < count_portoes; i++){
+        Portao* p = &portoes[i];
+        int result = 0;
+
+        switch (p->tipo){
+            case NOT:
+                result = !(p->pins_in[0].power);
+                break;
+            case OR:
+                result = (p->pins_in[0].power) | (p->pins_in[1].power);
+                break;
+            case AND:
+                result = (p->pins_in[0].power) & (p->pins_in[1].power);
+                break;
+            case XOR:
+                result = (p->pins_in[0].power) ^ (p->pins_in[1].power);
+                break;
+            case PWR:
+                continue;
+                break;
+            default:
+                continue;
+                break;
+        }
+
+        p->pins_out[0].power = result;
+    }
+
+
+}
+
 void renderGame(){
     BeginDrawing();
 
@@ -136,32 +191,8 @@ void renderGame(){
     for (size_t i = 0; i < count_portoes; i++){
         Portao* p = &portoes[i];
 
-        for (size_t j = 0; j < p->count_pi; j++){
-            DrawRectangle(p->pins_in[j].sc.x, p->pins_in[j].sc.y, p->pins_in[j].sc.size, p->pins_in[j].sc.size, GRAY);
-        }
-        for (size_t j = 0; j < p->count_po; j++){
-            DrawRectangle(p->pins_out[j].sc.x, p->pins_out[j].sc.y, p->pins_out[j].sc.size, p->pins_out[j].sc.size, GRAY);
-
-            for (size_t w = 0; w < p->pins_out[j].count_conex; w++){
-                int pox = p->pins_out[j].sc.x;
-                int poy = p->pins_out[j].sc.y;
-                int pos = p->pins_out[j].sc.size;
-                int pix = p->pins_out[j].conexoes[w]->sc.x;
-                int piy = p->pins_out[j].conexoes[w]->sc.y;
-                int pis = p->pins_out[j].conexoes[w]->sc.size;
-
-
-                Vector2 start = {pox+(pos/2), poy+(pos/2)};
-                Vector2 end = {pix+(pis/2), piy+(pis/2)};
-
-                DrawLineEx(start, end, WIRE_THICK, GRAY);
-                
-            }
-        }
-
         DrawRectangle(p->sc.x, p->sc.y, GATE_SIZE, GATE_SIZE, BLACK);
-
-        char nome[5];
+        char nome[10];
         switch (p->tipo){
             case NOT:
                 snprintf(nome, 10, "not");
@@ -175,12 +206,47 @@ void renderGame(){
             case XOR:
                 snprintf(nome, 10, "xor");
                 break;
+            case PWR:
+                snprintf(nome, 10, "pwr");
+                break;
+            case LUZ:
+                snprintf(nome, 10, "luz");
+                if (p->pins_in[0].power == 1){
+                    DrawRectangle(p->sc.x, p->sc.y, GATE_SIZE, GATE_SIZE, SKYBLUE);
+                }
+                break;
             default:
                 snprintf(nome, 10, "?");
                 break;
         }
-
         DrawText(nome, p->sc.x+5, p->sc.y+5, GATE_SIZE/3, WHITE);
+
+        for (size_t j = 0; j < p->count_pi; j++){
+            DrawRectangle(p->pins_in[j].sc.x, p->pins_in[j].sc.y, p->pins_in[j].sc.size, p->pins_in[j].sc.size, GRAY);
+        }
+        for (size_t j = 0; j < p->count_po; j++){
+            DrawRectangle(p->pins_out[j].sc.x, p->pins_out[j].sc.y, p->pins_out[j].sc.size, p->pins_out[j].sc.size, GRAY);
+
+            for (size_t w = 0; w < p->pins_out[j].count_conex; w++){
+                int pos = p->pins_out[j].sc.size; 
+                int pis = p->pins_out[j].conexoes[w]->sc.size;
+
+
+                Vector2 start = {p->pins_out[j].sc.x+(pos/2), p->pins_out[j].sc.y+(pos/2)};
+                Vector2 end = {p->pins_out[j].conexoes[w]->sc.x+(pis/2), p->pins_out[j].conexoes[w]->sc.y+(pis/2)};
+
+                if (p->pins_out[j].power == 0){
+                    DrawLineEx(start, end, WIRE_THICK, GRAY);
+                }
+                else{
+                    DrawLineEx(start, end, WIRE_THICK, SKYBLUE);
+                }
+                
+                
+            }
+        }
+
+        
     }
 
     EndDrawing();
@@ -199,7 +265,12 @@ void handleKeyboardInput(){
     if (IsKeyDown(KEY_N)){
         newPortao((int)mouse_coords.x, (int)mouse_coords.y, NOT);
     }
-
+    if (IsKeyDown(KEY_P)){
+        newPortao((int)mouse_coords.x, (int)mouse_coords.y, PWR);
+    }
+    if (IsKeyDown(KEY_L)){
+        newPortao((int)mouse_coords.x, (int)mouse_coords.y, LUZ);
+    }
 }
 
 void detectMouseObj(){
@@ -281,6 +352,15 @@ void handleMouseInput(){
 
     if (IsMouseButtonUp(MOUSE_LEFT_BUTTON)){
 
+        if (objeto_clicado != NULL && oc_tipo == GATE){
+            Portao* p = (Portao*)objeto_clicado;
+
+            if (p->tipo == PWR){
+                p->pins_out[0].power = !(p->pins_out[0].power);
+            }
+
+        }
+
         if (objeto_clicado != NULL && objeto_no_mouse != NULL && onm_tipo == PIN && oc_tipo == PIN){
             Pin* outpt = (Pin*)objeto_clicado;
             Pin* input = (Pin*)objeto_no_mouse;
@@ -296,11 +376,7 @@ void handleMouseInput(){
         }     
 }
 
-
 //-----
-
-
-
 int main(){
     portoes = malloc(GATE_LIMIT*sizeof(Portao));
     count_portoes = 0;
@@ -324,8 +400,9 @@ int main(){
         
         handleMouseInput();
 
-        
         //printf("(%p, %p)\n", objeto_no_mouse, objeto_clicado);
+        gameLogic();
+
         renderGame();
         
     }
